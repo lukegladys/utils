@@ -1,10 +1,10 @@
-﻿function FileLimit{
+function FileLimit{
     [CmdletBinding(DefaultParameterSetName='default')]
     param( 
         #Top Folder where search begins
         #Default = Current Location from Get-Location
         [Parameter(ParameterSetName = 'default')]
-        [string]$BasePath = (Get-Location),
+        [string]$BasePath = (Get-Location).ToString(),
 
         #Size of files
         #Default = 524288000 bytes = 500 MB = 0.5 GB
@@ -38,8 +38,8 @@
         #Then run Breadth-First-Search on all subfolders 
         #until $FileSizeLimit or $FileCountLimit are reached
         # or return size of all files if limits aren't reached
-        $folderQueue = New-Object System.Collection.Queue
-        $folderQueue.Enqueue($BasePath.ToString())
+        $folderQueue = New-Object System.Collections.Queue
+        $folderQueue.Enqueue($BasePath)
 
         #$IncludeFileTypes is favored over $ExcludeFileTypes
         if($IncludeFileTypes -ne 'ALL') {
@@ -59,7 +59,11 @@
 
 
     Process{
-        while($folderQueue){
+        while(($folderQueue.Count -gt 0) -and !($limitReached)){
+            $currentFolder = $null
+            $filesInCurrentFolder = $null
+            $foldersInCurrentFolder = $null
+
             $currentFolder = $folderQueue.Dequeue()
 
             if($ExcludeFileTypes -ne 'NONE'){
@@ -79,12 +83,12 @@
                     
                     $currentFile = $_
 
-                    $fileSizeCounter += $currentFile.Length
+                    $fileSizeTemp += $currentFile.Length
+                    $fileCountTemp += 1
 
-                    if($fileSizeCounter -gt $FileSizeLimit){
+                    if(($fileSizeTemp -gt $FileSizeLimit) -or ($fileCountTemp -gt $FileCountLimit)){
                         $limitReached = $true
-                        break
-
+                        return
                     }
                 }
 
@@ -92,7 +96,7 @@
 
             if($foldersInCurrentFolder){
                 $foldersInCurrentFolder | ForEach-Object {
-                    $currentFolder = $_.FullName
+                    $currentFolder = $_
 
                     $folderQueue.Enqueue($currentFolder.FullName)
 
@@ -107,9 +111,26 @@
 
     End{
 
-        if($limitReached){return}
+        if($limitReached){
+            return "Limit reached"
+            
+        }
 
-        return "Total File Size = $fileSize and there are $fileCount files"
+        $fileSizeInKB = [math]::Round($fileSizeTemp/1KB, 2)
+        $fileSizeInMB = [math]::Round($fileSizeTemp/1MB, 2)
+        $fileSizeinGB = [math]::Round($fileSizeTemp/1GB, 2)
+        
+        if($fileSizeInGB -gt 1){
+            $fileSize = "$fileSizeinGB GB" 
+        } elseif($fileSizeInMB -gt 1) {
+            $fileSize = "$fileSizeinMB MB"
+        } elseif($fileSizeInKB -gt 1) {
+            $fileSize = "$fileSizeinKB KB"
+        } else {
+            $fileSize = "$fileSizeTemp bytes"
+        }
+
+        return "There are $fileCountTemp files and $fileSize of data in base path and all sub directories"
     
     }
 }
